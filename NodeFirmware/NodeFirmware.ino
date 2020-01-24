@@ -70,11 +70,16 @@ void setup() {
   }
   Serial.println();
   Serial.println("Connected!");
-  printConnected();
 
   // Set up the UDP service
   Udp.begin(localUDPPort);
+
+  // Print the ready message
+  printConnected();
 }
+
+// ------------------------------
+// Printing section
 
 void printConnected() {
   // Print a little message saying that we are connected
@@ -84,24 +89,33 @@ void printConnected() {
   display.setCursor(0,0);
   display.println("Connected!");
   display.println( WiFi.localIP());
+  display.println("Press A to begin");
   display.display();
-  yield();
 }
 
-void sendPacket() {
-  // Encode the outgoing message
-  strcpy(opacket, "Hello World!");
-
-  // Send the packet
-  Udp.beginPacket(destip, serverUDPPort);
-  Udp.write(opacket);
-  Udp.endPacket();
-  yield();
-  delay(1);
-
-  // Print to serial so we know what happened
-  Serial.println("Sent a UDP packet");
+// This one needs to print the number of packets sent for debuging
+void printSendingMessage(int numSent) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Sending Data");
+  display.print("Packets Sent: ");
+  display.print(numSent);
+  display.display();
 }
+
+void printStandbyMessage() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Standing By");
+  display.println("Press A to begin");
+  display.display();
+}
+
+// ------------------------------
 
 void handleUDPPacket() {
  int packetSize = Udp.parsePacket();
@@ -120,11 +134,90 @@ void handleUDPPacket() {
   }
 }
 
+// ------------------------------
+// Collecting and Sending Data
+
+// How many pieces of sensor information should be in each packet?
+const uint16_t PACKETSAMPLESIZE = 128;
+
+// What is the current index of packet information
+uint16_t currentSample = 0;
+
+// This method will get the data from the sensor and add it to the out packet
+void collectData() {
+  // For now, we will just store the audio information across two bytes.
+  // We are also sending the raw data. I think it is unlikely that this is the
+  //  data we want to send. We will probably do some of the audio processing
+  //  on the stations instead of doing it all on the server
+  // It is not efficient. It will work for now. I just want a Proof of Concept
+  //todo:: improve
+  uint16_t d = analogRead(A0);
+
+  // sending raw data, little endian
+  opacket[currentSample*2]   = d & 0xFF;
+  opacket[currentSample*2+1] = d >> 8;
+
+  // Increment counter
+  currentSample++;
+}
+
+// Sends whatever is in the opacket and resets counters
+void sendPacket() {
+  // Send the packet
+  Udp.beginPacket(destip, serverUDPPort);
+  Udp.write(opacket);
+  Udp.endPacket();
+
+  // Print to serial just so we know to expect a packet
+  Serial.println("Sent packet");
+
+  // Reset counters
+  currentSample = 0;
+}
+
+// ------------------------------
+
+bool doSend = false;
+bool wasPressed = false;
+int ns = 0;
+
 void loop() {
-  // Wait until the A button is pressed to send packets
+  // We will use the A button to toggle sending
   if (!digitalRead(A_BUTTON)) {
-    sendPacket();
-    delay(10);
+    if (!wasPressed) {
+      if (!doSend) {
+        doSend = true;
+        printSendingMessage(ns);
+      } else {
+        doSend = false;
+        // We will also clear the counters
+        currentSample = 0;
+        ns = 0;
+        // And display
+        printStandbyMessage();
+      }
+      wasPressed = true;
+    }
+  } else {
+    wasPressed = false;
   }
+
+  if (doSend) {
+    // We need to collect the data we will send
+    if (currentSample < PACKETSAMPLESIZE) {
+      collectData();
+      delay(1);
+    } else {
+      // Send our data!
+      sendPacket();
+      
+      // Do some debug stuff
+      //todo:: remove
+      ns++;
+      printSendingMessage(ns);
+    }
+  }
+
+  // We handle UDP packets even if we aren't sending data
   handleUDPPacket();
 }
