@@ -23,6 +23,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
+#include "Station.h"
 
 
 // Defines used for the TFT display
@@ -30,6 +31,10 @@
 #define TFT_CS   0
 #define TFT_DC   15
 #define SD_CS    2
+
+// Keeping things simple with a maximum number of stations that are tracked with this instance.
+#define MAX_NUMBER_STATIONS 4
+Station stations[MAX_NUMBER_STATIONS];
 
 const char *ssid = "AMS-server";
 unsigned int localUDPPort = 8888;
@@ -47,7 +52,7 @@ WiFiUDP Udp;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(57600);
 
   delay(10);
   Serial.println("Server firmware started.");
@@ -66,16 +71,9 @@ void setup() {
   x = tft.readcommand8(ILI9341_RDSELFDIAG);
   Serial.print("Self Diagnostic: 0x"); Serial.println(x, HEX); 
 
-  displayWelcome();
   WiFi.softAP(ssid,NULL); 
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("IP address: ");
-  Serial.println(myIP);
 
-  tft.setCursor(0,50);
-  tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
-  tft.print( "IP Address: ");
-  tft.println(myIP);
+  displayWelcome();
 
   // Start listening for packets on the UDP port.
   Udp.begin(localUDPPort);
@@ -83,6 +81,10 @@ void setup() {
   server.on("/", handleRoot);
   server.begin();
   Serial.println("HTTP server started");
+
+  for (int i=0; i<MAX_NUMBER_STATIONS; i++) { 
+    initializeStation(stations[i]);
+  }
 }
 
 void handleRoot() {
@@ -97,13 +99,25 @@ void displayWelcome() {
   tft.setTextColor(ILI9341_YELLOW); tft.setTextSize(1);
   tft.print("Entering into AP mode with SSID: ");
   tft.println(ssid);
+
+  tft.setCursor(0,50);
+  tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
+  tft.print( "IP Address: ");
+  tft.println(WiFi.softAPIP());
+
+  tft.setCursor(0,70);
+  tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
+  tft.println( "Number connections: 0");
+  tft.println( "Number packets received: 0");
 }
 
 int numberOfPacketsReceived = 0;
+bool updateDisplayRequired = false;
 
 void handleUDPPacket() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
+    updateDisplayRequired = true;
     numberOfPacketsReceived += 1;
     Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
                   packetSize,
@@ -129,27 +143,34 @@ void handleUDPPacket() {
   }
 }
 
-uint32_t timeOfStatsLastUpdate = 0;
+uint8_t priorAPStationNum = 0;
 
 void updateDisplayStats() {
-  if( millis() - timeOfStatsLastUpdate < 2000 ) { 
+
+  if( WiFi.softAPgetStationNum() != priorAPStationNum ) { 
+    updateDisplayRequired = true;
+  }
+  if (updateDisplayRequired == false) { 
     return;
   }
-  timeOfStatsLastUpdate = millis();
+
+  updateDisplayRequired = false;
+  priorAPStationNum = WiFi.softAPgetStationNum();
   
   // Clear the prior lines
-  tft.fillRect(0,70,320,120, ILI9341_BLACK);
-  tft.setCursor(0,70);
+  tft.fillRect(119,70,40,9, ILI9341_BLACK);
+  tft.fillRect(148,78,40,9, ILI9341_BLACK);
+
   tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
-  tft.print( "Number connections: ");
-  tft.println(WiFi.softAPgetStationNum());
-  tft.print( "Number packets received: ");
-  tft.println( numberOfPacketsReceived);
+
+  tft.setCursor(119,70);
+  tft.print(WiFi.softAPgetStationNum());
+
+  tft.setCursor(148,78);
+  tft.print(numberOfPacketsReceived);
 }
 
 void loop() {
   handleUDPPacket();
   updateDisplayStats();
-  yield();
-  delay(100);
 }
