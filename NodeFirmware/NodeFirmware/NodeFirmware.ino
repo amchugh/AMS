@@ -61,6 +61,7 @@ void setup() {
   display.display();
 
   // Try to connect to the server
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssidtarget, NULL);
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
@@ -78,10 +79,11 @@ void setup() {
 void printConnected() {
   // Print a little message saying that we are connected
   display.clearDisplay();
-  display.setTextSize(2);
+  display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
   display.println("Connected!");
+  display.println( WiFi.localIP());
   display.display();
   yield();
 }
@@ -101,10 +103,28 @@ void sendPacket() {
   Serial.println("Sent a UDP packet");
 }
 
+void handleUDPPacket() {
+ int packetSize = Udp.parsePacket();
+ if (packetSize) {
+    Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
+                  packetSize,
+                  Udp.remoteIP().toString().c_str(), Udp.remotePort(),
+                  Udp.destinationIP().toString().c_str(), Udp.localPort(),
+                  ESP.getFreeHeap());
+
+    // read the packet into packetBufffer
+    int n = Udp.read(ipacket, UDP_TX_PACKET_MAX_SIZE);
+    ipacket[n] = 0;
+    Serial.println("Contents:");
+    Serial.println(ipacket);
+  }
+}
+
 void loop() {
   // Wait until the A button is pressed to send packets
   if (!digitalRead(A_BUTTON)) {
     sendPacket();
     delay(10);
   }
+  handleUDPPacket();
 }

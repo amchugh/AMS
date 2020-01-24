@@ -99,9 +99,12 @@ void displayWelcome() {
   tft.println(ssid);
 }
 
+int numberOfPacketsReceived = 0;
+
 void handleUDPPacket() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
+    numberOfPacketsReceived += 1;
     Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
                   packetSize,
                   Udp.remoteIP().toString().c_str(), Udp.remotePort(),
@@ -126,7 +129,27 @@ void handleUDPPacket() {
   }
 }
 
+uint32_t timeOfStatsLastUpdate = 0;
+
+void updateDisplayStats() {
+  if( millis() - timeOfStatsLastUpdate < 2000 ) { 
+    return;
+  }
+  timeOfStatsLastUpdate = millis();
+  
+  // Clear the prior lines
+  tft.fillRect(0,70,320,120, ILI9341_BLACK);
+  tft.setCursor(0,70);
+  tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
+  tft.print( "Number connections: ");
+  tft.println(WiFi.softAPgetStationNum());
+  tft.print( "Number packets received: ");
+  tft.println( numberOfPacketsReceived);
+}
+
 void loop() {
   handleUDPPacket();
- 
+  updateDisplayStats();
+  yield();
+  delay(100);
 }
