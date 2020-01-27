@@ -20,6 +20,7 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
+#include <Adafruit_STMPE610.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
@@ -42,14 +43,14 @@ unsigned int localUDPPort = 8888;
 // Allocate buffers for sending and receiving UDP data.
 // The maximum UDP packet size is defined in https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiUdp.h
 // and, as of 1/22/2020, is 8k.  
-char incomingPacket[UDP_TX_PACKET_MAX_SIZE + 1]; 
-char outgoingPacket[UDP_TX_PACKET_MAX_SIZE + 1];
+byte incomingPacket[UDP_TX_PACKET_MAX_SIZE + 1]; 
 
 // An HTTP server exists for diagnostic and debugging purposes
 ESP8266WebServer server(80);
 
 WiFiUDP Udp;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+Adafruit_STMPE610 ts = Adafruit_STMPE610(STMPE_CS);
 
 void setup() {
   Serial.begin(57600);
@@ -58,6 +59,11 @@ void setup() {
   Serial.println("Server firmware started.");
   tft.begin();
   tft.setRotation(1);
+
+  if (!ts.begin()) {
+    Serial.println("Couldn't start touchscreen controller");
+    while (1);
+  }
 
   // TFT diagnostic information that can be useful for debugging.
   uint8_t x = tft.readcommand8(ILI9341_RDMODE);
@@ -117,29 +123,35 @@ bool updateDisplayRequired = false;
 void handleUDPPacket() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
+    uint32_t currentTime = millis();
     updateDisplayRequired = true;
     numberOfPacketsReceived += 1;
-    Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
-                  packetSize,
-                  Udp.remoteIP().toString().c_str(), Udp.remotePort(),
-                  Udp.destinationIP().toString().c_str(), Udp.localPort(),
-                  ESP.getFreeHeap());
 
     // read the packet into packetBufffer
     int n = Udp.read(incomingPacket, UDP_TX_PACKET_MAX_SIZE);
     incomingPacket[n] = 0;
-    Serial.println("Contents:");
-    Serial.println(incomingPacket);
 
-    // Handle the incoming packet appropriately.
-    // Formulate a response that indicates that the packet was received.
-    
-    strcpy( outgoingPacket, "Gotit");
-    
-    // send a reply, to the IP address and port that sent us the packet we received
-    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-    Udp.write(outgoingPacket);
-    Udp.endPacket();
+    IPAddress sender = Udp.remoteIP();
+    StationIdentifier id = incomingPacket[0];
+    PacketNumber p = incomingPacket[1];
+    int stationIndex = findStation(stations, MAX_NUMBER_STATIONS, id);
+    if (stationIndex == -1) { 
+      stationIndex = addStation(stations, MAX_NUMBER_STATIONS, id);
+      Serial.printf("handleUDPPacket - new station detected; IP: %s, ID: %d, AllocatedIndex: %d\n", 
+        sender.toString().c_str(), id, stationIndex);
+    } 
+
+    if (stationIndex >= 0) { 
+      // So many assumptions here that will go away once Aidan submits his code.
+      uint16_t data = (((uint16_t)(incomingPacket[2])) << 8) & incomingPacket[3];
+
+      Serial.printf("handleUDPPacket - processing data; IP: %s, ID: %d, stationIndex: %d, packetNumber: %d, Value: %d\n",
+        sender.toString().c_str(), id, stationIndex, p, data);
+      
+      addDataPoint(stations[stationIndex], p, data, currentTime);
+    } else {
+      Serial.println("handleUDPPacket - discarding data due to all station slots full");
+    }
   }
 }
 
@@ -173,4 +185,14 @@ void updateDisplayStats() {
 void loop() {
   handleUDPPacket();
   updateDisplayStats();
+
+  /*
+  // Retrieve a point  
+  TS_Point p = ts.getPoint();
+
+  if (p.z < 100) { 
+    priorAPStationNum = 0;
+    numberOfPacketsReceived = 0;
+  }
+  */
 }

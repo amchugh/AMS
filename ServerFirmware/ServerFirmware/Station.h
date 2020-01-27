@@ -23,20 +23,25 @@
 
 // The maximum number of datapoints.
 #define MAX_DATA_POINTS 100
+#define NO_STATION_ALLOCATED 255
+
+typedef uint8_t PacketNumber;
+typedef uint8_t StationIdentifier;
 
 // Class information for a station
 struct Station {
-  IPAddress address;
+  StationIdentifier id;
   uint16_t audioDataPointValues[MAX_DATA_POINTS];
   uint32_t audioDataPointTimes[MAX_DATA_POINTS];
 
   uint8_t indexOfNextDataPoint;
   uint8_t numberDataPoints;
   uint32_t lastNonzeroDataPointTime;
+  PacketNumber lastPacketNumber;
 };
 
-void initializeStation(Station &s, const IPAddress &a) {
-  s.address = a;
+void initializeStation(Station &s, const StationIdentifier id) {
+  s.id = id;
 
   for (int i=0; i<MAX_DATA_POINTS; i++) {
     s.audioDataPointValues[i] = 0;
@@ -45,19 +50,20 @@ void initializeStation(Station &s, const IPAddress &a) {
   s.indexOfNextDataPoint = 0;
   s.numberDataPoints = 0;
   s.lastNonzeroDataPointTime = 0;
+  s.lastPacketNumber = 0;
 }
 
 void initializeStation(Station &s) {
-  initializeStation(s, INADDR_NONE);
+  initializeStation(s, NO_STATION_ALLOCATED);
 }
 
 
-// Find the station for a specified IPAddress and return the index
+// Find the station for a specified identifier and return the index
 // or return -1 if the station is not found.
-int8_t findStation(const Station* s, int numberOfStations, const IPAddress &a) {
+int8_t findStation(const Station* s, int numberOfStations, const StationIdentifier id) {
   int result = -1;
   for (int i=0; i<numberOfStations; i++) {
-    if (s[i].address == a) {
+    if (s[i].id == id) {
       return i;
     }
   }
@@ -67,25 +73,30 @@ int8_t findStation(const Station* s, int numberOfStations, const IPAddress &a) {
 // Find a slot for a new station and intialize all of the data members.
 // This function will return -1 if no slot was available or -2 if the
 // station already exists.
-int8_t addStation(Station *s, int numberOfStations, IPAddress &a) {
-  int8_t i = findStation(s, numberOfStations, a);
+int8_t addStation(Station *s, int numberOfStations, const StationIdentifier id) {
+  int8_t i = findStation(s, numberOfStations, id);
   if (i =! -1) {
     return -2;
   }
 
-
   int index = 0;
   for (; index<numberOfStations; index++) {
-    if (s[index].address == INADDR_NONE) {
+    if (s[index].id == NO_STATION_ALLOCATED) {
       break;
     }
   }
-
-
+  if (index == numberOfStations) {
+    // Consider doing a victims selection at some point in the future.
+    // That is, if a node hasn't been active in awhile then kick it
+    // out and allow this new one to replace it.
+    return -1;
+  }
+  initializeStation(s[index], id);
+  return index;
 }
 
 
-void addDataPoint(Station &s, uint16_t value, uint32_t time) {
+void addDataPoint(Station &s, uint16_t value, PacketNumber p, uint32_t time) {
   if (s.indexOfNextDataPoint == MAX_DATA_POINTS) {
     s.indexOfNextDataPoint = 0;
   }
@@ -99,8 +110,21 @@ void addDataPoint(Station &s, uint16_t value, uint32_t time) {
   if (value!=0 && time > s.lastNonzeroDataPointTime) {
     s.lastNonzeroDataPointTime = time;
   }
+  s.lastPacketNumber = p;
 }
 
+
+/**
+  * Determines whether a station is managing any data values that are
+  * close in time to the passed in time value.  This is used to
+  * determine whether a station is updating their data in a roughly
+  * similar way (from a time perspective) to other stations.
+  *
+  * A caller could determine that a lack of recent values means that the
+  * station has fallen silent and can then synthesize fake values or
+  * even remove the station from consideration.
+  *
+  */
 bool doesStationHaveRecentValues(Station &s, uint32_t time) {
   // If the number of data points is zero then clearly it doesn't have a
   // recent value.
