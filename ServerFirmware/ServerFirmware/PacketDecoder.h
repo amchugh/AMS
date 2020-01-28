@@ -43,10 +43,14 @@ void processPacket(*PacketData p, byte *packet, int packetLength) {
     samples[offset * 4 + 2] = packet[HEADER_SIZE + offset * 5 + 2];
     samples[offset * 4 + 3] = packet[HEADER_SIZE + offset * 5 + 3];
 
-    samples[offset * 4 + 0] += packet[HEADER_SIZE + (offset * 5) - 1] & 0b11000000;
-    samples[offset * 4 + 1] += packet[HEADER_SIZE + (offset * 5) - 1] & 0b00110000;
-    samples[offset * 4 + 2] += packet[HEADER_SIZE + (offset * 5) - 1] & 0b00001100;
-    samples[offset * 4 + 3] += packet[HEADER_SIZE + (offset * 5) - 1] & 0b00000011;
+    samples[offset * 4 + 0] += 
+      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b11000000) >> 6) << 8;
+    samples[offset * 4 + 1] += 
+      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00110000) >> 4) << 8;
+    samples[offset * 4 + 2] += 
+      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00001100) >> 2) << 8;
+    samples[offset * 4 + 3] += 
+      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00000011) >> 0) << 8;
   }
 
   return;
