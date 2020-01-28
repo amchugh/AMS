@@ -13,6 +13,7 @@
 //  Upload speed: 115200
 //  CPU: 80 Mhz
 
+#include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -44,12 +45,6 @@ WiFiUDP Udp;
 char ipacket[UDP_TX_PACKET_MAX_SIZE + 1];
 char opacket[UDP_TX_PACKET_MAX_SIZE + 1];
 
-// Variables for loop
-bool doSend = false;
-bool wasPressed = false;
-int packetNumber = 0;
-uint32_t stime;
-
 void setup() {
   Serial.begin(57600);
   // Set the button pinmodes
@@ -61,19 +56,17 @@ void setup() {
 
   // Init the display
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
+  // Clear the display
+  display.clearDisplay();
+  display.display();
 
   // Try to connect to the server
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssidtarget, NULL);
-  // Print the "searching" message
-  printSearching();
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    display.print(".");
-    display.display();
-    yield();
   }
   Serial.println();
   Serial.println("Connected!");
@@ -88,8 +81,8 @@ void setup() {
 // ------------------------------
 // Printing section
 
-// Print a message saying that we are connected to WiFi
 void printConnected() {
+  // Print a little message saying that we are connected
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -100,26 +93,21 @@ void printConnected() {
   display.display();
 }
 
-// Print a message to the display that we are searching
-void printSearching() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0,0);
-  display.println("Connecting");
-  display.display();
-}
-
-void printSendingMessage() {
+// This one needs to print the number of packets sent for debuging
+void printSendingMessage(int numSent, uint32_t timeDif) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
   display.println("Sending Data");
+  display.print("Packets Sent: ");
+  display.println(numSent);
+  display.print("Time to send: ");
+  display.println(timeDif);
   display.display();
 }
 
-void printStandbyMessage(int packetCount) {
+void printStandbyMessage(int numSent) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -127,7 +115,7 @@ void printStandbyMessage(int packetCount) {
   display.println("Standing By");
   display.println("Press A to begin");
   display.print("Packets Sent: ");
-  display.println(packetCount);
+  display.println(numSent);
   display.display();
 }
 
@@ -153,138 +141,11 @@ void handleUDPPacket() {
 // ------------------------------
 // Collecting and Sending Data
 
-
-/*
-
-  PACKET STRUCTURE
-
-The first two bits will be used for the station number.
-(0, 1, 2, or 3)
-This is where the data is coming from. This is encoded in the packet
-instead of by the sending IP Address so we can easily spoof data
-from a computer for testing purposes before we build the rest of the stations
-
-The next six bits represent the packet number. This gives 64 numbers before looping.
-64 should be plenty of width for ensuring we are reading in the correct order.
-I doubt we will drop 63 packets in a row without having a larger issue.
-
--------------------------------------
-|Bit number | 0| 1| 2| 3| 4| 5| 6| 7|
-|Represents |SI|SI|PN|PN|PN|PN|PN|PN|
--------------------------------------
-
-SI = Station ID Number
-PN = Packet Number
-
-This has also changed.
-Now it is 
-one byte for statiod ID
-one byte for packet number,
-
-*/
-
-// How much space is allocated for the header (in bytes)?
-#define HEADERSPACE 2
-
-/*
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!! No, there's a far more simple way of doing this
-
-~!~!~!~!~!~!~! Except that this might actually be the simple way
-
-Then, the data is sent in 5 byte chunks. As the samples are 10 bits long, we need 40
-bits to transmit 4 samples. 
-The first 8 least significant bits of the sample will be stored in their own byte.
-The other 2 bits (the 2 most significant bits) will be put into the fifth byte of the
-sequence. 
-
---------------------------------------------------------------
-|Byte        |  1  |  2  |  3  |  4  |           5           |
-|Bit Numbers |0 - 7|8 -15|16-23|24-31|32|33|34|35|36|37|38|39|
-|Sample      |  1  |  2  |  3  |  4  |  1  |  2  |  3  |  4  |
---------------------------------------------------------------
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-I thought about it for about 30 seconds and realized there is an easier way of encoding
-that information.
-
-4 samples will be sent in 5 byte chunks. It would be most efficient to send packets
-with sample counts being a multiple of four (4 samples, 8, 12, 64, 128) as it
-means there will be no empty data. It also makes reading packets a little easier.
-Packets will likely have a size corrosponding to 1 + 4x
-The data looks as follows
-
---------------------------------------
-|Bit Numbers |0 - 9|10-19|20-29|30-39|
-|Sample      |  1  |  2  |  3  |  4  |
---------------------------------------
-
-.... I've made another mistake. While my new solution is far easier to conceptualize,
-the code is really difficult. I think it might be smarter to use the original idea.
-
-Here is the code I started writing
-
-~~~~~~ void collectData()
-~~~~~~ ...
-  // This gives us the number of bytes to move to the right by
-  int byte_off = HEADERSPACE + (currentSample*10/8);
-  // This gives the number of bits to move to the right by
-  int bit_off  = currentSample*10%8;
-
-  for (int i = 0; i < 5; i++) {
-    if (bit_off == 0) {
-      // We can (probably) fill the rest of the byte with the rest of the data
-      if (i == 0) {
-        // The whole sample won't fit in the byte, so we need to only put
-        // the first 8 bites
-        opacket[byte_off] = d & 0xFF;
-        i = 3;
-      } else {
-        // We need to bit-shift the data to the left so it fills the most significant
-        opacket
-        break;
-      }
-    }
-  }
-~~~~~ ... 
-
-*/
-
 // How many pieces of sensor information should be in each packet?
-// MUST BE A MULTIPLE OF 4 TO ENSURE PROPER READING
-const uint16_t PACKETSAMPLESIZE = 32;
+const uint16_t PACKETSAMPLESIZE = 8;
 
 // What is the current index of packet information
 uint16_t currentSample = 0;
-
-/*
-cs = 7
-
-h = 0
-s0 = 1
-s1 = 2
-s2 = 3
-s3 = 4
-g1 = 5
-s4 = 6
-s5 = 7
-s6 = 8
-s7 = 9
-g2 = 10
-*/
-
-// Sets the information in the header of the packet
-void setupPacket() {
-  currentSample = 0;
-  opacket[0] = getStationID();
-  opacket[1] = packetNumber % (256);
-}
-
-uint8_t getStationID() {
-  return (WiFi.localIP()[3]);
-}
 
 // This method will get the data from the sensor and add it to the out packet
 void collectData() {
@@ -296,22 +157,9 @@ void collectData() {
   //todo:: improve
   uint16_t d = analogRead(A0);
 
-  // Put data into group
-
-  // get some position values
-  int group_number   = currentSample/4;
-  int s_group_pos    = currentSample%4;
-  int group_byte_loc = HEADERSPACE + ((group_number+1) * 5) - 1;   // -1 for index 0
-  int s_byte_loc     = HEADERSPACE + (group_number*5 + s_group_pos); 
-
-  opacket[s_byte_loc]     = d & 0xFF;
-  opacket[group_byte_loc] = opacket[group_byte_loc] | ((d >> 8) << 2*s_group_pos);
-
-/*
   // sending raw data, little endian
   opacket[currentSample*2]   = d & 0xFF;
   opacket[currentSample*2+1] = d >> 8;
-*/
 
   // Increment counter
   currentSample++;
@@ -323,10 +171,17 @@ void sendPacket() {
   Udp.beginPacket(destip, serverUDPPort);
   Udp.write(opacket);
   Udp.endPacket();
+
+  // Reset counters
+  currentSample = 0;
 }
 
 // ------------------------------
 
+bool doSend = false;
+bool wasPressed = false;
+int ns = 0;
+uint32_t stime;
 
 /**
 
@@ -337,41 +192,8 @@ The goal for transmission is:
 
 **/
 
-void loop() {
-  if (!digitalRead(A_BUTTON)) {
-    // toggle
-    if (!wasPressed) {
-      if (doSend) {
-        doSend = false;
-        printStandbyMessage(packetNumber);
-      } else {
-        doSend = true;
-        setupPacket();
-        printSendingMessage();
-      }
-      wasPressed = true;
-    }
-  } else {
-    wasPressed = false;
-  }
-
-  if (doSend) {
-    // We use a while loop here so we have some guarantee on the delay between samples
-    while (currentSample < PACKETSAMPLESIZE) {
-      collectData();
-      delay(1);
-    } 
-    sendPacket();
-    packetNumber++;
-    // Now setup the new packet
-    setupPacket();
-  }
-
-  // We will take this time to process UDP
-  handleUDPPacket();
-}
-
 /*
+void loop() {
   // We will use the A button to toggle sending
   if (doSend) {
     // We need to collect the data we will send
@@ -399,7 +221,7 @@ void loop() {
 / *
       uint32_t diff = millis() - stime;
       printSendingMessage(ns, diff);
-*b /
+* /
     }
   } else {
     if (!digitalRead(A_BUTTON)) {
@@ -424,4 +246,25 @@ void loop() {
     }
 
   }
+
+  // We handle UDP packets even if we aren't sending data
+  //handleUDPPacket();
+}
 */
+
+void loop() {
+  if (!digitalRead(A_BUTTON)) {
+    Serial.println("Starting");
+    uint32_t t = millis();
+    Serial.printf("Time: %d\n", t);
+    for (uint16_t n = 0; n < 1000; n++) {
+      collectData();  
+      collectData();  
+      sendPacket();
+      yield();
+      delay(50);
+    }
+    Serial.println("Done");
+    Serial.printf("Time diff: %d\n", millis() - t);
+  }
+}

@@ -11,3 +11,8 @@ Server instance is:
  * Adafruit Feather Huzzah with ESP8266 - https://www.adafruit.com/product/2821
  * Featherwing touch screen display - https://www.adafruit.com/product/3315
  
+
+The goal for transmission from each station is: 
+- 25 packets per second 
+- <=5% drop rate at 30ft through a wall
+- 50 new data points per packet
