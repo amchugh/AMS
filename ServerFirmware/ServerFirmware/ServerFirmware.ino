@@ -25,7 +25,7 @@
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
 #include "Station.h"
-
+#include "PacketDecoder.h"
 
 // Defines used for the TFT display
 #define STMPE_CS 16
