@@ -68,7 +68,7 @@ int getSampleLength(int packetLength) {
  * doesn't inflate memory. Packet Length should be the length of the message as
  * the expected packet size cannot be assumed constant.
  */
-void processPacket(PacketData &p, const byte * const packet, int packetLength) {
+void decodePacket(PacketData &p, const byte * const packet, int packetLength) {
   // Get some of the misc. information
   p.sampleCount = getSampleLength(packetLength);
   p.packetNumber = getPacketNumber(packet);
@@ -82,14 +82,14 @@ void processPacket(PacketData &p, const byte * const packet, int packetLength) {
     p.samples[offset * 4 + 2] = packet[HEADER_SIZE + offset * 5 + 2];
     p.samples[offset * 4 + 3] = packet[HEADER_SIZE + offset * 5 + 3];
 
-    p.samples[offset * 4 + 0] +=
-      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b11000000) >> 6) << 8;
-    p.samples[offset * 4 + 1] +=
-      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00110000) >> 4) << 8;
-    p.samples[offset * 4 + 2] +=
-      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00001100) >> 2) << 8;
-    p.samples[offset * 4 + 3] +=
-      ((uint16_t)(packet[HEADER_SIZE + (offset * 5) - 1] & 0b00000011) >> 0) << 8;
+    // msbs = most significant bits.  These are the 2 bits taken with the
+    // prior 8 that give us the 10 bit value that is sampled and transmitted.
+    byte msbs = packet[HEADER_SIZE + offset * 5 + 4];
+
+    p.samples[offset * 4 + 0] += ((uint16_t)(msbs & 0b11000000) >> 6) << 8;
+    p.samples[offset * 4 + 1] += ((uint16_t)(msbs & 0b00110000) >> 4) << 8;
+    p.samples[offset * 4 + 2] += ((uint16_t)(msbs & 0b00001100) >> 2) << 8;
+    p.samples[offset * 4 + 3] += ((uint16_t)(msbs & 0b00000011) >> 0) << 8;
   }
 }
 

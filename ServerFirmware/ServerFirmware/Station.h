@@ -21,7 +21,8 @@
 // 'same' time for the purposes of accounting.
 #define TIME_DISCRETIZE_UNIT_MS 100
 
-// The maximum number of datapoints.
+// The maximum number of datapoints that will be tracked per station and
+// maintained in memory.
 #define MAX_DATA_POINTS 100
 #define NO_STATION_ALLOCATED 255
 

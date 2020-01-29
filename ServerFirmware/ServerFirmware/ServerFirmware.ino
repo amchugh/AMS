@@ -129,26 +129,25 @@ void handleUDPPacket() {
 
     // read the packet into packetBufffer
     int n = Udp.read(incomingPacket, UDP_TX_PACKET_MAX_SIZE);
-    incomingPacket[n] = 0;
 
+    PacketData p;
+    decodePacket(p, incomingPacket, n);
+    
     IPAddress sender = Udp.remoteIP();
-    StationIdentifier id = incomingPacket[0];
-    PacketNumber p = incomingPacket[1];
-    int stationIndex = findStation(stations, MAX_NUMBER_STATIONS, id);
+    int stationIndex = findStation(stations, MAX_NUMBER_STATIONS, p.packetSenderID);
     if (stationIndex == -1) { 
-      stationIndex = addStation(stations, MAX_NUMBER_STATIONS, id);
+      stationIndex = addStation(stations, MAX_NUMBER_STATIONS, p.packetSenderID);
       Serial.printf("handleUDPPacket - new station detected; IP: %s, ID: %d, AllocatedIndex: %d\n", 
-        sender.toString().c_str(), id, stationIndex);
+        sender.toString().c_str(), p.packetSenderID, stationIndex);
     } 
 
     if (stationIndex >= 0) { 
-      // So many assumptions here that will go away once Aidan submits his code.
-      uint16_t data = (((uint16_t)(incomingPacket[2])) << 8) & incomingPacket[3];
-
-      Serial.printf("handleUDPPacket - processing data; IP: %s, ID: %d, stationIndex: %d, packetNumber: %d, Value: %d\n",
-        sender.toString().c_str(), id, stationIndex, p, data);
-      
-      addDataPoint(stations[stationIndex], p, data, currentTime);
+      Serial.printf("handleUDPPacket - processing data; IP: %s, ID: %d, stationIndex: %d, packetNumber: %d, datapoints: %d\n",
+        sender.toString().c_str(), p.packetSenderID, stationIndex, p.packetNumber, p.sampleCount);
+      for (int i=0; i < p.sampleCount; i++) { 
+        Serial.printf("handleUDPPacket - index: %2d, data: %d\n", i, p.samples[i]);
+        addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
+      }
     } else {
       Serial.println("handleUDPPacket - discarding data due to all station slots full");
     }
