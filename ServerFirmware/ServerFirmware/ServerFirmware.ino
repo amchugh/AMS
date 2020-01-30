@@ -26,6 +26,7 @@
 #include <WiFiUdp.h>
 #include "Station.h"
 #include "PacketDecoder.h"
+#include "GfxGraphing.h"
 
 // Defines used for the TFT display
 #define STMPE_CS 16
@@ -39,6 +40,8 @@ Station stations[MAX_NUMBER_STATIONS];
 
 const char *ssid = "AMS-server";
 unsigned int localUDPPort = 8888;
+
+Graphing *g;
 
 // Allocate buffers for sending and receiving UDP data.
 // The maximum UDP packet size is defined in https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiUdp.h
@@ -91,6 +94,13 @@ void setup() {
   for (int i=0; i<MAX_NUMBER_STATIONS; i++) { 
     initializeStation(stations[i]);
   }
+
+  g = new Graphing( tft, 10, 100, 30, 100 );
+  g->setBackgroundColor(ILI9341_BLACK);
+  g->setBorderColor(ILI9341_WHITE);
+  g->setMinAndMaxYAxisValues(0, 1024);
+  g->setDatasetColor(ILI9341_RED);
+  g->startGraphing();
 }
 
 void handleRoot() {
@@ -147,7 +157,9 @@ void handleUDPPacket() {
       for (int i=0; i < p.sampleCount; i++) { 
         Serial.printf("handleUDPPacket - index: %2d, data: %d\n", i, p.samples[i]);
         addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
+        g->addDatasetValue(p.samples[i]);
       }
+      g->update();
     } else {
       Serial.println("handleUDPPacket - discarding data due to all station slots full");
     }
