@@ -9,7 +9,7 @@
 #define DATAPOINT_OFFSET_X AXIS_OFFSET_X + 2
 #define DATAPOINT_OFFSET_Y AXIS_OFFSET_Y + 2
 
-Graphing::Graphing(Adafruit_GFX &d, int topLeftX, int topLeftY, int
+SegmentedBarGraph::SegmentedBarGraph(Adafruit_GFX &d, int topLeftX, int topLeftY, int
     width, int height) : display(d)
 {
   this->topLeftX = topLeftX;
@@ -22,18 +22,18 @@ Graphing::Graphing(Adafruit_GFX &d, int topLeftX, int topLeftY, int
   setupMode = true;
 }
 
-void Graphing::setupDefaults() {
+void SegmentedBarGraph::setupDefaults() {
   backgroundColor = 0x0;
   borderColor = 0xFFFF;
   minYAxisValue = 0;
   maxYAxisValue = 1.0;
-  currentX = 0;
+
   numberSegments = 8;
 
   for (int i=0; i<MOST_RECENT_VALUES_COUNT_MAX; i++) {
     mostRecentValues[i] = 0;
   }
-  mostRecentValuesCount = 0;
+  mostRecentValuesIndex = -1;
   mostRecentValueMillis = 0;
 
   currentValue = 0;
@@ -44,37 +44,36 @@ void Graphing::setupDefaults() {
   recomputeLayoutProperties();
 }
 
-void Graphing::recomputeLayoutProperties() {
-  mapDataValueToYScale = (float) height / (maxYAxisValue - minYAxisValue);
-
-  segmentSize = height / numberSegments;
-
-  Serial.printf("recomputeLayoutProperties - done; minYAxisValue: %f, maxYAxisValue: %f, height: %d, mapDataValueToYScale: %f\n",
-      minYAxisValue, maxYAxisValue, height, mapDataValueToYScale);
-  Serial.printf("recomputeLayoutProperties - done; numberSegments: %d, segmentSize: %d\n",
-      numberSegments, segmentSize);
+void SegmentedBarGraph::recomputeLayoutProperties() {
+  segmentHeight = height / numberSegments;
+  Serial.printf("recomputeLayoutProperties - done; numberSegments: %d, "
+      "segmentHeight: %d\n",
+      numberSegments, segmentHeight);
 }
 
-void Graphing::setBackgroundColor(uint16_t backgroundColor) {
+void SegmentedBarGraph::setBackgroundColor(uint16_t backgroundColor) {
   this->backgroundColor = backgroundColor;
 }
 
-void Graphing::setBorderColor(uint16_t borderColor) {
+void SegmentedBarGraph::setBorderColor(uint16_t borderColor) {
   this->borderColor = borderColor;
 }
 
-void Graphing::setMinAndMaxYAxisValues(float minYAxisValue,
+void SegmentedBarGraph::setSegmentGroupColors(uint16_t colorGroupOne,
+    uint16_t colorGroupTwo, uint16_t colorGroupThree) {
+  this->segmentGroupOneColor = colorGroupOne;
+  this->segmentGroupTwoColor = colorGroupTwo;
+  this->segmentGroupThreeColor = colorGroupThree;
+}
+
+void SegmentedBarGraph::setMinAndMaxYAxisValues(float minYAxisValue,
     float maxYAxisValue) {
   this->minYAxisValue = minYAxisValue;
   this->maxYAxisValue = maxYAxisValue;
   recomputeLayoutProperties();
 }
 
-void Graphing::setDatasetColor(uint16_t datasetColor) {
-  this->datasetColor = datasetColor;
-}
-
-void Graphing::startGraphing() {
+void SegmentedBarGraph::startGraphing() {
   if (setupMode == false) {
     throw std::logic_error("Cannot call start graphing twice");
   }
@@ -82,42 +81,53 @@ void Graphing::startGraphing() {
   drawFrame();
 }
 
-void Graphing::drawFrame() {
+void SegmentedBarGraph::drawFrame() {
   display.fillRect(topLeftX, topLeftY, width, height, backgroundColor);
   display.drawRect(topLeftX, topLeftY, width, height, borderColor);
 
   for (int i=0; i<numberSegments; i++) {
-    display.drawFastHLine(topLeftX, topLeftY+(segmentSize*i), width,
-        borderColor);
+    uint16_t y = getSegmentTopLeftY(i);
+
+    Serial.printf("drawFrame; segment: %d, topLeft: %d\n", i, y);
+
+    display.drawFastHLine(topLeftX, y, width, borderColor);
   }
 }
 
-void Graphing::handleMostRecentValues(float value) {
+void SegmentedBarGraph::handleMostRecentValues(float value) {
   uint32_t currentMillis = millis();
 
   if (currentMillis - mostRecentValueMillis > 1000) {
     // A new second has passed.
     mostRecentValueMillis = currentMillis;
-    mostRecentValuesCount++;
+    mostRecentValuesIndex++;
 
-    if (mostRecentValuesCount == MOST_RECENT_VALUES_COUNT_MAX) {
+    if (mostRecentValuesIndex == MOST_RECENT_VALUES_COUNT_MAX) {
       // Shuffle everything to the left
       for (int i=1; i<MOST_RECENT_VALUES_COUNT_MAX; i++) {
         mostRecentValues[i-1] = mostRecentValues[i];
       }
-      mostRecentValuesCount = MOST_RECENT_VALUES_COUNT_MAX - 1;
+      mostRecentValuesIndex = MOST_RECENT_VALUES_COUNT_MAX - 1;
     }
-    mostRecentValues[mostRecentValuesCount] = value;
+    Serial.printf(
+        "handleMostRecentValues - new second seen; index: %d, value: %f\n",
+        mostRecentValuesIndex, value);
+
+    mostRecentValues[mostRecentValuesIndex] = value;
   } else {
-    // Otherwise we look at the mostRecentValuesCount index in the
+    // Otherwise we look at the mostRecentValuesIndex index in the
     // mostRecentValues array and see if this new value is larger.
-    if (value > mostRecentValues[mostRecentValuesCount]) {
-      mostRecentValues[mostRecentValuesCount] = value;
+    if (value > mostRecentValues[mostRecentValuesIndex]) {
+      Serial.printf(
+          "handleMostRecentValues - duplicate second but larger value; "
+          "old Max: %f, newMax: %f\n",
+          mostRecentValues[mostRecentValuesIndex], value);
+      mostRecentValues[mostRecentValuesIndex] = value;
     }
   }
 }
 
-float Graphing::getMostRecentMaxValue() {
+float SegmentedBarGraph::getMostRecentMaxValue() {
   float max = 0;
   for (int i=0; i<MOST_RECENT_VALUES_COUNT_MAX; i++) {
     if (mostRecentValues[i] > max) {
@@ -128,7 +138,7 @@ float Graphing::getMostRecentMaxValue() {
 }
 
 
-void Graphing::addDatasetValue(float y) {
+void SegmentedBarGraph::addDatasetValue(float y) {
   if (setupMode) {
     throw std::logic_error("Must be fully setup before usage.");
   }
@@ -144,7 +154,7 @@ void Graphing::addDatasetValue(float y) {
   currentValueCount++;
 }
 
-void Graphing::update() {
+void SegmentedBarGraph::update() {
 
   // CurrentValue has the sum of all of the values added to the dataset
   // since the last update call.  We average them to get a simple aggregate
@@ -170,7 +180,14 @@ void Graphing::update() {
   priorMax = max;
 }
 
-uint8_t Graphing::mapValueToSegmentCount(float v) {
+/**
+  * This returns the number of segments (and not the segment index!)
+  * that should be lite up given a value v within the range of minYAxisValue
+  * and maxYAxisValue.  Given a value 'x' returned from this function
+  * you would light up [0..x).  (Not inclusive of x.)
+  *
+  */
+uint8_t SegmentedBarGraph::mapValueToSegmentCount(float v) {
   float separator = maxYAxisValue / numberSegments;
 
   float raw = v / separator;
@@ -182,7 +199,49 @@ uint8_t Graphing::mapValueToSegmentCount(float v) {
   return result;
 }
 
-void Graphing::drawBars(float current, float prior) {
+uint16_t SegmentedBarGraph::getSegmentColor(uint8_t segment) {
+  // The bottom half will all be the first color and then the top half is
+  // divided into two evenly between the new two color groups.
+  if (segment < numberSegments / 2) {
+    return segmentGroupOneColor;
+  } else if (segment < numberSegments * 3 / 4 ) {
+    return segmentGroupTwoColor;
+  } else {
+    return segmentGroupThreeColor;
+  }
+}
+
+uint16_t SegmentedBarGraph::getSegmentTopLeftY(uint8_t segment) {
+  // This ASCII art shows the pixel locations for the segments.
+  //
+  //
+  //
+  //                         topLeftY
+  //                               +----------+
+  //                               |          |
+  //                               |          |  Segment: numberSegments - 1
+  //                               |          |
+  //      topLeftY + segmentHeight +----------+
+  //                               |          |
+  //                                   ...
+  //                               |          |
+  // (topLeftY + (n*segmentHeight) +----------+
+  //      - segmentHeight)         |          |
+  //                               |          |  Segment: n
+  //                               |          |
+  // topLeftY + (n*segmentHeight)  +----------+
+  //                               |          |
+  //                                   ...
+
+  // Two things to remember:
+  //   1/  The 0th segment is the bottom most one so we find the bottom point
+  //   and work backwards from that.
+  //   2/  We subtract an additional segmentHeight because we want the top
+  //   y point of the segment.
+  return topLeftY + height - (segmentHeight * segment) - segmentHeight;
+}
+
+void SegmentedBarGraph::drawBars(float current, float prior) {
   int currentSegmentIndex = mapValueToSegmentCount(current);
   int priorSegmentIndex = mapValueToSegmentCount(prior);
 
@@ -194,29 +253,36 @@ void Graphing::drawBars(float current, float prior) {
   } else if (currentSegmentIndex < priorSegmentIndex) {
     // Need to erase some segments
     for (int i=priorSegmentIndex; i>=currentSegmentIndex; i--) {
-      display.fillRect(topLeftX+1, topLeftY+1+segmentSize*i, width-2,
-            segmentSize-2, backgroundColor);
+      display.fillRect(topLeftX+1, getSegmentTopLeftY(i)+1,
+          width-2, segmentHeight-2, backgroundColor);
     }
   } else {
     // Need to fill in some segments
     for (int i=priorSegmentIndex; i<currentSegmentIndex; i++) {
-      display.fillRect(topLeftX+1, topLeftY+1+(segmentSize)*i, width-2,
-            segmentSize-2, datasetColor);
+      display.fillRect(topLeftX+1, getSegmentTopLeftY(i)+1,
+          width-2, segmentHeight-2, getSegmentColor(i));
     }
   }
 }
 
-void Graphing::drawMax(float current, float prior) {
-  int currentSegmentIndex = mapValueToSegmentCount(current);
-  int priorSegmentIndex = mapValueToSegmentCount(prior);
+void SegmentedBarGraph::drawMax(float current, float prior) {
+  // Since these values here are indexes we subtract one from the count
+  // to handle the fact that the bottom most segment is segment zero.
+  int currentSegmentIndex = mapValueToSegmentCount(current) - 1;
+  int priorSegmentIndex = mapValueToSegmentCount(prior) - 1;
 
   Serial.printf("drawMax; current: %f, prior: %f, currentSegment: %d, priorSegment: %d\n",
       current, prior, currentSegmentIndex, priorSegmentIndex);
 
-  // Erase the red line drawn on the border for the prior (replace it
-  // with white) and then draw a new red line.
-  display.drawFastHLine(topLeftX, topLeftY+(segmentSize*priorSegmentIndex), width,
-      borderColor);
-  display.drawFastHLine(topLeftX, topLeftY+(segmentSize*currentSegmentIndex), width,
-      0xFF0);
+  // Erase the prior line drawn and then draw a new marker line.
+  if (priorSegmentIndex >= 0) {
+    display.drawFastHLine(topLeftX-3, getSegmentTopLeftY(priorSegmentIndex), width+6,
+        backgroundColor);
+    display.drawFastHLine(topLeftX, getSegmentTopLeftY(priorSegmentIndex), width,
+        borderColor);
+  }
+  if (currentSegmentIndex >= 0) {
+    display.drawFastHLine(topLeftX-3, getSegmentTopLeftY(currentSegmentIndex),
+        width+6, segmentGroupThreeColor);
+  }
 }

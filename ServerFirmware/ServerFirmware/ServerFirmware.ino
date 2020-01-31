@@ -41,7 +41,7 @@ Station stations[MAX_NUMBER_STATIONS];
 const char *ssid = "AMS-server";
 unsigned int localUDPPort = 8888;
 
-Graphing *g;
+SegmentedBarGraph *g;
 
 // Allocate buffers for sending and receiving UDP data.
 // The maximum UDP packet size is defined in https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiUdp.h
@@ -95,11 +95,12 @@ void setup() {
     initializeStation(stations[i]);
   }
 
-  g = new Graphing( tft, 10, 100, 30, 100 );
+  // g = new SegmentedBarGraph( tft, 10, 120, 24, 96 );
+  g = new SegmentedBarGraph( tft, 260, 40, 24, 176 );
   g->setBackgroundColor(ILI9341_BLACK);
   g->setBorderColor(ILI9341_WHITE);
   g->setMinAndMaxYAxisValues(0, 1024);
-  g->setDatasetColor(ILI9341_RED);
+  g->setSegmentGroupColors(ILI9341_GREEN, ILI9341_YELLOW, ILI9341_RED);
   g->startGraphing();
 }
 
@@ -198,12 +199,14 @@ void loop() {
   updateDisplayStats();
 
   /*
-  // Retrieve a point  
-  TS_Point p = ts.getPoint();
+   * Code to consider when I want to respond to touch gestures.  Not sure how long this will
+   * take and whether we should be careful about impact on receiving packets.
+   *
+   TS_Point p = ts.getPoint();
 
-  if (p.z < 100) { 
-    priorAPStationNum = 0;
-    numberOfPacketsReceived = 0;
-  }
+   if (p.z < 100) { 
+     priorAPStationNum = 0;
+     numberOfPacketsReceived = 0;
+   }
   */
 }
