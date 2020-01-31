@@ -55,6 +55,8 @@ WiFiUDP Udp;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 Adafruit_STMPE610 ts = Adafruit_STMPE610(STMPE_CS);
 
+uint32_t lastGraphRenderTime = 0;
+
 void setup() {
   Serial.begin(57600);
 
@@ -160,7 +162,6 @@ void handleUDPPacket() {
         addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
         g->addDatasetValue(p.samples[i]);
       }
-      g->update();
     } else {
       Serial.println("handleUDPPacket - discarding data due to all station slots full");
     }
@@ -195,8 +196,15 @@ void updateDisplayStats() {
 }
 
 void loop() {
+  uint32_t currentTime = millis();
+
   handleUDPPacket();
   updateDisplayStats();
+
+  if ((currentTime - lastGraphRenderTime) > 33) { 
+    lastGraphRenderTime = currentTime;
+    g->render();
+  }
 
   /*
    * Code to consider when I want to respond to touch gestures.  Not sure how long this will

@@ -17,19 +17,15 @@ SegmentedBarGraph::SegmentedBarGraph(Adafruit_GFX &d, int topLeftX, int topLeftY
   this->width = width;
   this->height = height;
 
-  setupDefaults();
-
-  setupMode = true;
-}
-
-void SegmentedBarGraph::setupDefaults() {
+  /* Some default values set for the graph. */
   backgroundColor = 0x0;
   borderColor = 0xFFFF;
   minYAxisValue = 0;
   maxYAxisValue = 1.0;
-
   numberSegments = 8;
+  segmentHeight = height / numberSegments;
 
+  /* Initialize state values used by the graph. */
   for (int i=0; i<MOST_RECENT_VALUES_COUNT_MAX; i++) {
     mostRecentValues[i] = 0;
   }
@@ -41,14 +37,7 @@ void SegmentedBarGraph::setupDefaults() {
   priorValue = 0;
   priorMax = 0;
 
-  recomputeLayoutProperties();
-}
-
-void SegmentedBarGraph::recomputeLayoutProperties() {
-  segmentHeight = height / numberSegments;
-  Serial.printf("recomputeLayoutProperties - done; numberSegments: %d, "
-      "segmentHeight: %d\n",
-      numberSegments, segmentHeight);
+  setupMode = true;
 }
 
 void SegmentedBarGraph::setBackgroundColor(uint16_t backgroundColor) {
@@ -70,7 +59,6 @@ void SegmentedBarGraph::setMinAndMaxYAxisValues(float minYAxisValue,
     float maxYAxisValue) {
   this->minYAxisValue = minYAxisValue;
   this->maxYAxisValue = maxYAxisValue;
-  recomputeLayoutProperties();
 }
 
 void SegmentedBarGraph::startGraphing() {
@@ -154,14 +142,19 @@ void SegmentedBarGraph::addDatasetValue(float y) {
   currentValueCount++;
 }
 
-void SegmentedBarGraph::update() {
+void SegmentedBarGraph::render() {
 
   // CurrentValue has the sum of all of the values added to the dataset
-  // since the last update call.  We average them to get a simple aggregate
+  // since the last render call.  We average them to get a simple aggregate
   // value.
-  if (currentValueCount > 0) {
-    currentValue /= currentValueCount;
+  if (currentValueCount == 0) {
+    // Assume that 0 is the correct default value to be used if no data has
+    // been given.
+    addDatasetValue(0);
   }
+
+  // Determine the average value
+  currentValue /= currentValueCount;
 
   if (currentValue != priorValue) {
     // Update the bars that are drawn.
@@ -181,16 +174,16 @@ void SegmentedBarGraph::update() {
 }
 
 /**
-  * This returns the number of segments (and not the segment index!)
-  * that should be lite up given a value v within the range of minYAxisValue
-  * and maxYAxisValue.  Given a value 'x' returned from this function
-  * you would light up [0..x).  (Not inclusive of x.)
+  * This returns the number of segments (and not the segment index which is
+  * based zero!) that should be lite up given a value v within the range of
+  * minYAxisValue and maxYAxisValue.  Given a value 'x' returned from this
+  * function you would light up [0..x).  (Not inclusive of x.)
   *
   */
 uint8_t SegmentedBarGraph::mapValueToSegmentCount(float v) {
-  float separator = maxYAxisValue / numberSegments;
+  float separator = (maxYAxisValue - minYAxisValue) / numberSegments;
 
-  float raw = v / separator;
+  float raw = (v - minYAxisValue) / separator;
   uint8_t result = (raw + 0.5);
 
   if (v>0 && result==0) {
@@ -211,6 +204,11 @@ uint16_t SegmentedBarGraph::getSegmentColor(uint8_t segment) {
   }
 }
 
+/**
+  * Returns the top left Y coordinate for a segment.
+  * The segments are arranged from top to bottom in decreasing numbers.
+  * The segments are base zero so the 0th segment is always at the bottom.
+  */
 uint16_t SegmentedBarGraph::getSegmentTopLeftY(uint8_t segment) {
   // This ASCII art shows the pixel locations for the segments.
   //
@@ -266,8 +264,11 @@ void SegmentedBarGraph::drawBars(float current, float prior) {
 }
 
 void SegmentedBarGraph::drawMax(float current, float prior) {
-  // Since these values here are indexes we subtract one from the count
-  // to handle the fact that the bottom most segment is segment zero.
+  // mapValueToSegmentCount returns a count of the number of
+  // segments are filled in.  The zeroth segment index would
+  // have a count value of 0.  We want to draw the topmost part
+  // as a high water mark so we subtract one from the count in
+  // order to know which segment line we want to draw.
   int currentSegmentIndex = mapValueToSegmentCount(current) - 1;
   int priorSegmentIndex = mapValueToSegmentCount(prior) - 1;
 
