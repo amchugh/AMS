@@ -25,6 +25,8 @@
 // maintained in memory.
 #define MAX_DATA_POINTS 100
 #define NO_STATION_ALLOCATED 255
+#define INVALID_PACKET_NUMBER_RANGE 5
+#define MAX_PACKET_NUMBER 255
 
 typedef uint8_t PacketNumber;
 typedef uint8_t StationIdentifier;
@@ -96,6 +98,24 @@ int8_t addStation(Station *s, int numberOfStations, const StationIdentifier id) 
   return index;
 }
 
+// Current implementation of isPacketValid will look at the five previous
+// packet number values for Station. If the new packet number is equal to 
+// the current, or if it is contained in the old range, it will be declared invalid
+bool isPacketValid(Station &s, PacketNumber p) {
+  // Get the obvious check out of the way
+  if (p == s.lastPacketNumber) return false;
+
+  // Now we will check the previous X range for this value
+  int16_t c = s.lastPacketNumber;
+  for (uint8_t i = 0; i < INVALID_PACKET_NUMBER_RANGE; i++) {
+    c--;
+    if (c < 0) c = MAX_PACKET_NUMBER;
+    if (c == p) return false; 
+  }
+
+  // If it passed all the tests, its good to go
+  return true;
+}
 
 void addDataPoint(Station &s, uint16_t value, PacketNumber p, uint32_t time) {
   if (s.indexOfNextDataPoint == MAX_DATA_POINTS) {

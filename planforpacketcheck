@@ -1,0 +1,3 @@
+My current plan for checking the validity of packets recieved by the Controller
+We will blacklist a certain range of packets (~5?).
+The blacklist will extend backwards from the most recent packet recieved
