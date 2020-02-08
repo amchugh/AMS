@@ -133,6 +133,8 @@ void displayWelcome() {
 int numberOfPacketsReceived = 0;
 bool updateDisplayRequired = false;
 
+// todo:: add a check utilizing bool isPacketValid(Station &, PacketNumber) to
+// todo:: avoid using old or repeat packets.
 void handleUDPPacket() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
