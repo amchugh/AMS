@@ -40,6 +40,7 @@ struct Station {
   uint8_t indexOfNextDataPoint;
   uint8_t numberDataPoints;
   uint32_t lastNonzeroDataPointTime;
+  uint32_t invalidPacketCount;
   PacketNumber lastPacketNumber;
 };
 
@@ -53,6 +54,7 @@ void initializeStation(Station &s, const StationIdentifier id) {
   s.indexOfNextDataPoint = 0;
   s.numberDataPoints = 0;
   s.lastNonzeroDataPointTime = 0;
+  s.invalidPacketCount = 0;
   s.lastPacketNumber = 0;
 }
 
@@ -99,20 +101,24 @@ int8_t addStation(Station *s, int numberOfStations, const StationIdentifier id) 
 }
 
 // Current implementation of isPacketValid will look at the five previous
-// packet number values for Station. If the new packet number is equal to 
-// the current, or if it is contained in the old range, it will be declared invalid
+// packet number values for Station. If the new packet number is equal to
+// the current, or if it is contained in the old range, it will be declared
+// invalid
 bool isPacketValid(Station &s, PacketNumber p) {
-  // Get the obvious check out of the way
-  if (p == s.lastPacketNumber) return false;
-
-  // Now we will check the previous X range for this value
+  // Starting from the last packet number seen and then working backwards
+  // we look to see if there is a match between the passed in packet numbers
+  // and any of those.
   int16_t c = s.lastPacketNumber;
-  for (uint8_t i = 0; i < INVALID_PACKET_NUMBER_RANGE; i++) {
+  for (uint8_t i = 0; i <= INVALID_PACKET_NUMBER_RANGE; i++) {
+    if (c == p) {
+      s.invalidPacketCount++;
+      return false;
+    }
     c--;
     if (c < 0) c = MAX_PACKET_NUMBER;
-    if (c == p) return false; 
   }
 
+  s.lastPacketNumber = p;
   // If it passed all the tests, its good to go
   return true;
 }
@@ -131,7 +137,6 @@ void addDataPoint(Station &s, uint16_t value, PacketNumber p, uint32_t time) {
   if (value!=0 && time > s.lastNonzeroDataPointTime) {
     s.lastNonzeroDataPointTime = time;
   }
-  s.lastPacketNumber = p;
 }
 
 

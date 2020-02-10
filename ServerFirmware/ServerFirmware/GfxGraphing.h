@@ -5,7 +5,7 @@
 // The number of recent data points to track in order to show the
 // maximum value for the past.  The value here is tracked as 'seconds'
 // with one maximum datapoint value for each second.
-#define MOST_RECENT_VALUES_COUNT_MAX 10
+#define MOST_RECENT_VALUES_COUNT_MAX 4
 
 /**
   * SegmentedBarGraph is a class that handles the display of a dataset by

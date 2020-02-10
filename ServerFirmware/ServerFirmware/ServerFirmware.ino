@@ -41,7 +41,7 @@ Station stations[MAX_NUMBER_STATIONS];
 const char *ssid = "AMS-server";
 unsigned int localUDPPort = 8888;
 
-SegmentedBarGraph *g;
+SegmentedBarGraph *g[MAX_NUMBER_STATIONS];
 
 // Allocate buffers for sending and receiving UDP data.
 // The maximum UDP packet size is defined in https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiUdp.h
@@ -93,17 +93,27 @@ void setup() {
   server.begin();
   Serial.println("HTTP server started");
 
+#define XOFFSET 40
+#define WIDTH 320
+
+#define SEGMENTSIZE ((WIDTH - (XOFFSET*2)) / MAX_NUMBER_STATIONS)
+
+ //  0     40    100    160    220    280     320
+ //  |     |      +      +      +       |      |
+
+
   for (int i=0; i<MAX_NUMBER_STATIONS; i++) { 
     initializeStation(stations[i]);
+    g[i] = new SegmentedBarGraph( tft, XOFFSET + (SEGMENTSIZE * i) + ((SEGMENTSIZE - 2*24)/2), 48, 24, 168 );
+    g[i]->setBackgroundColor(ILI9341_BLACK);
+    g[i]->setBorderColor(ILI9341_WHITE);
+    g[i]->setMinAndMaxYAxisValues(0, 1024);
+    g[i]->setSegmentGroupColors(ILI9341_GREEN, ILI9341_YELLOW, ILI9341_RED);
+    g[i]->startGraphing();
   }
-
-  // g = new SegmentedBarGraph( tft, 10, 120, 24, 96 );
-  g = new SegmentedBarGraph( tft, 260, 40, 24, 176 );
-  g->setBackgroundColor(ILI9341_BLACK);
-  g->setBorderColor(ILI9341_WHITE);
-  g->setMinAndMaxYAxisValues(0, 1024);
-  g->setSegmentGroupColors(ILI9341_GREEN, ILI9341_YELLOW, ILI9341_RED);
-  g->startGraphing();
+  for (int i=0; i<(MAX_NUMBER_STATIONS-1); i++) { 
+    tft.drawFastVLine(XOFFSET + (SEGMENTSIZE * i) + 46, 42, 184, ILI9341_RED);
+  }
 }
 
 void handleRoot() {
@@ -112,29 +122,19 @@ void handleRoot() {
 
 void displayWelcome() {
   tft.fillScreen(ILI9341_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ILI9341_RED);  tft.setTextSize(2);
+  tft.setCursor(0, 0); tft.setTextColor(ILI9341_RED); tft.setTextSize(2);
   tft.println("AMS Server");
-  tft.setTextColor(ILI9341_YELLOW); tft.setTextSize(1);
-  tft.print("Entering into AP mode with SSID: ");
-  tft.println(ssid);
 
-  tft.setCursor(0,50);
+  tft.setCursor(0,20);
   tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
-  tft.print( "IP Address: ");
-  tft.println(WiFi.softAPIP());
-
-  tft.setCursor(0,70);
-  tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
-  tft.println( "Number connections: 0");
-  tft.println( "Number packets received: 0");
+  tft.println( "Conns: 0");
+  tft.setCursor(70,20);
+  tft.println( "Packets: 0");
 }
 
 int numberOfPacketsReceived = 0;
 bool updateDisplayRequired = false;
 
-// todo:: add a check utilizing bool isPacketValid(Station &, PacketNumber) to
-// todo:: avoid using old or repeat packets.
 void handleUDPPacket() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
@@ -151,18 +151,34 @@ void handleUDPPacket() {
     IPAddress sender = Udp.remoteIP();
     int stationIndex = findStation(stations, MAX_NUMBER_STATIONS, p.packetSenderID);
     if (stationIndex == -1) { 
+      // Attempt to add a station and get a stationIndex.  This might result in
+      // a -1 for stationIndex if there are no free slots.
       stationIndex = addStation(stations, MAX_NUMBER_STATIONS, p.packetSenderID);
-      Serial.printf("handleUDPPacket - new station detected; IP: %s, ID: %d, AllocatedIndex: %d\n", 
+      Serial.printf(
+        "handleUDPPacket - new station detected; IP: %s, ID: %d, AllocatedIndex: %d\n", 
         sender.toString().c_str(), p.packetSenderID, stationIndex);
     } 
 
     if (stationIndex >= 0) { 
-      Serial.printf("handleUDPPacket - processing data; IP: %s, ID: %d, stationIndex: %d, packetNumber: %d, datapoints: %d\n",
-        sender.toString().c_str(), p.packetSenderID, stationIndex, p.packetNumber, p.sampleCount);
-      for (int i=0; i < p.sampleCount; i++) { 
-        Serial.printf("handleUDPPacket - index: %2d, data: %d\n", i, p.samples[i]);
-        addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
-        g->addDatasetValue(p.samples[i]);
+      if ( !isPacketValid(stations[stationIndex], p.packetNumber) ) { 
+        Serial.printf("handleUDPPacket - invalid packet seen, discarding; IP: %s, "
+                      "ID: %d, stationIndex: %d, packetNumber: %d, datapoints: %d\n",
+          sender.toString().c_str(), p.packetSenderID, stationIndex, p.packetNumber, 
+          p.sampleCount);
+      } else { 
+#ifdef DEBUG_PRINT
+        Serial.printf("handleUDPPacket - valid packet seen; IP: %s, ID: %d, "
+                      "stationIndex: %d, packetNumber: %d, datapoints: %d\n",
+          sender.toString().c_str(), p.packetSenderID, stationIndex, p.packetNumber, 
+          p.sampleCount);
+#endif
+        for (int i=0; i < p.sampleCount; i++) { 
+#ifdef DEBUG_PRINT
+          Serial.printf("handleUDPPacket - index: %2d, data: %d\n", i, p.samples[i]);
+#endif
+          addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
+          g[stationIndex]->addDatasetValue(p.samples[i]);
+        }
       }
     } else {
       Serial.println("handleUDPPacket - discarding data due to all station slots full");
@@ -185,15 +201,15 @@ void updateDisplayStats() {
   priorAPStationNum = WiFi.softAPgetStationNum();
   
   // Clear the prior lines
-  tft.fillRect(119,70,40,9, ILI9341_BLACK);
-  tft.fillRect(148,78,40,9, ILI9341_BLACK);
+  tft.fillRect(41,20,18,9, ILI9341_BLACK);
+  tft.fillRect(124,20,40,9, ILI9341_BLACK);
 
   tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1);
 
-  tft.setCursor(119,70);
+  tft.setCursor(41,20);
   tft.print(WiFi.softAPgetStationNum());
 
-  tft.setCursor(148,78);
+  tft.setCursor(124,20);
   tft.print(numberOfPacketsReceived);
 }
 
@@ -205,7 +221,9 @@ void loop() {
 
   if ((currentTime - lastGraphRenderTime) > 33) { 
     lastGraphRenderTime = currentTime;
-    g->render();
+    for (int i=0; i<MAX_NUMBER_STATIONS; i++) { 
+      g[i]->render();
+    }
   }
 
   /*

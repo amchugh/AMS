@@ -75,9 +75,6 @@ void SegmentedBarGraph::drawFrame() {
 
   for (int i=0; i<numberSegments; i++) {
     uint16_t y = getSegmentTopLeftY(i);
-
-    Serial.printf("drawFrame; segment: %d, topLeft: %d\n", i, y);
-
     display.drawFastHLine(topLeftX, y, width, borderColor);
   }
 }
@@ -97,19 +94,17 @@ void SegmentedBarGraph::handleMostRecentValues(float value) {
       }
       mostRecentValuesIndex = MOST_RECENT_VALUES_COUNT_MAX - 1;
     }
-    Serial.printf(
-        "handleMostRecentValues - new second seen; index: %d, value: %f\n",
-        mostRecentValuesIndex, value);
-
     mostRecentValues[mostRecentValuesIndex] = value;
   } else {
     // Otherwise we look at the mostRecentValuesIndex index in the
     // mostRecentValues array and see if this new value is larger.
     if (value > mostRecentValues[mostRecentValuesIndex]) {
+#ifdef DEBUG_PRINT
       Serial.printf(
           "handleMostRecentValues - duplicate second but larger value; "
           "old Max: %f, newMax: %f\n",
           mostRecentValues[mostRecentValuesIndex], value);
+#endif
       mostRecentValues[mostRecentValuesIndex] = value;
     }
   }
@@ -243,8 +238,10 @@ void SegmentedBarGraph::drawBars(float current, float prior) {
   int currentSegmentIndex = mapValueToSegmentCount(current);
   int priorSegmentIndex = mapValueToSegmentCount(prior);
 
+#ifdef DEBUG_PRINT
   Serial.printf("drawBars; current: %f, prior: %f, currentSegment: %d, priorSegment: %d\n",
       current, prior, currentSegmentIndex, priorSegmentIndex);
+#endif
 
   if (currentSegmentIndex == priorSegmentIndex) {
     return;
@@ -272,8 +269,10 @@ void SegmentedBarGraph::drawMax(float current, float prior) {
   int currentSegmentIndex = mapValueToSegmentCount(current) - 1;
   int priorSegmentIndex = mapValueToSegmentCount(prior) - 1;
 
+#ifdef DEBUG_PRINT
   Serial.printf("drawMax; current: %f, prior: %f, currentSegment: %d, priorSegment: %d\n",
       current, prior, currentSegmentIndex, priorSegmentIndex);
+#endif
 
   // Erase the prior line drawn and then draw a new marker line.
   if (priorSegmentIndex >= 0) {

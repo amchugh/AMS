@@ -1,3 +1,13 @@
 My current plan for checking the validity of packets recieved by the Controller
 We will blacklist a certain range of packets (~5?).
 The blacklist will extend backwards from the most recent packet recieved
+
+02/09/2020 8:19:31 AM  
+ - Consider what happens when packets arrive out of order.  What happens if the
+   packet X+4 arrives before X, X+1, X+2, X+3?   Do we have to worry about this?  
+ - Suggestion - How could you use a traditional hash table to maintain a
+   perfect answer?  
+ - Suggestion - look into a Bloom Filter.  Conisder the advantages of using
+   this over a more traditional data structure.  How would you handle the time
+   bloom filter as the time horizon broadens?
+
