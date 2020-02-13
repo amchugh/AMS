@@ -47,7 +47,7 @@ char opacket[UDP_TX_PACKET_MAX_SIZE + 1];
 // Variables for loop
 bool doSend = false;
 bool wasPressed = false;
-int packetNumber = 0;
+uint32_t packetNumber = 0;
 uint32_t stime;
 
 void setup() {
@@ -253,8 +253,8 @@ Here is the code I started writing
 */
 
 // How many pieces of sensor information should be in each packet?
-// MUST BE A MULTIPLE OF 4 TO ENSURE PROPER READING
-const uint16_t PACKETSAMPLESIZE = 32;
+// MUST BE A MULTIPLE OF 4 TO ENSURE PROPER ENCODING
+const uint16_t PACKETSAMPLESIZE = 4;
 
 // What is the current index of packet information
 uint16_t currentSample = 0;
@@ -277,6 +277,10 @@ g2 = 10
 
 // Sets the information in the header of the packet
 void setupPacket() {
+
+  // Clear out the entire packet so the bit manipulations work correctly.
+  memset(opacket, 0, UDP_TX_PACKET_MAX_SIZE+1);
+
   currentSample = 0;
   opacket[0] = getStationID();
   opacket[1] = packetNumber % (256);
@@ -286,19 +290,57 @@ uint8_t getStationID() {
   return (WiFi.localIP()[3]);
 }
 
+struct Sample {
+  uint16_t minValue;
+  uint16_t maxValue;
+  uint16_t sampleCount;
+};
+
+
+// In testing our hardware we can get about 50 samples in a 5 millisecond
+// period.  Shorter durations here will make the unit more responsive.
+// Keep in mind that we collect many samples before sending them to the
+// server.
+#define SAMPLE_DURATION_MS 5
+struct Sample getDataSample() { 
+  struct Sample result;
+
+  result.maxValue = 0;
+  result.minValue = 1025;
+  result.sampleCount = 0;
+
+  unsigned long startMillis = millis();  
+
+  while (millis() - startMillis < SAMPLE_DURATION_MS){
+    uint16_t v = analogRead(A0);
+    if (v > result.maxValue) {
+      result.maxValue = v; 
+    } 
+    if (v < result.minValue) {
+      result.minValue = v; 
+    }
+    result.sampleCount++;
+  }
+  return result;
+}
+
+
 // This method will get the data from the sensor and add it to the out packet
 void collectData() {
-  // For now, we will just store the audio information across two bytes.
-  // We are also sending the raw data. I think it is unlikely that this is the
-  //  data we want to send. We will probably do some of the audio processing
-  //  on the stations instead of doing it all on the server
-  // It is not efficient. It will work for now. I just want a Proof of Concept
-  //todo:: improve
-  uint16_t d = analogRead(A0);
 
-  // Put data into group
+  struct Sample s = getDataSample();
 
-  // get some position values
+  // The raw data values are not useful but the difference in the minimum and
+  // maximum value gives us a sense of volume level that has occured during
+  // the time we have sampled the waveform. 
+  uint16_t d = s.maxValue - s.minValue;
+
+  Serial.printf("collectData; min: %d, max: %d, count: %d, v: %d\n", 
+    s.minValue, s.maxValue, s.sampleCount, d);
+
+  // The 10 bit value appearing in d is placed in the outgoing packet. 
+  // Current encoding puts the first 8 bits in the next available slot
+  // then the last 2 bits in with a group of other high order bits.
   int group_number   = currentSample/4;
   int s_group_pos    = currentSample%4;
   int group_byte_loc = HEADERSPACE + ((group_number+1) * 5) - 1;   // -1 for index 0
@@ -306,12 +348,6 @@ void collectData() {
 
   opacket[s_byte_loc]     = d & 0xFF;
   opacket[group_byte_loc] = opacket[group_byte_loc] | ((d >> 8) << 2*s_group_pos);
-
-/*
-  // sending raw data, little endian
-  opacket[currentSample*2]   = d & 0xFF;
-  opacket[currentSample*2+1] = d >> 8;
-*/
 
   // Increment counter
   currentSample++;
@@ -370,58 +406,3 @@ void loop() {
   // We will take this time to process UDP
   handleUDPPacket();
 }
-
-/*
-  // We will use the A button to toggle sending
-  if (doSend) {
-    // We need to collect the data we will send
-    if (currentSample < PACKETSAMPLESIZE) {
-      / *
-      if (currentSample == 0) {
-        stime = millis();
-      }
-      * /
-      collectData();
-      //delay(.1f);
-    } else {
-      // Send our data!
-      sendPacket();
-      
-      // Do some debug stuff
-      //todo:: remove
-      ns++;
-
-      if (ns == 1000) {
-        doSend = false;
-      }
-      
-      // Get the time difference and update display
-/ *
-      uint32_t diff = millis() - stime;
-      printSendingMessage(ns, diff);
-*b /
-    }
-  } else {
-    if (!digitalRead(A_BUTTON)) {
-      if (!wasPressed) {
-        if (!doSend) {
-          // We will also clear the counters
-          currentSample = 0;
-          ns = 0;
-
-          doSend = true;
-          // update display
-          printSendingMessage(ns, 0);
-        } else {
-          doSend = false;
-          // And display
-          printStandbyMessage(ns);
-        }
-        wasPressed = true;
-      }
-    } else {
-      wasPressed = false;
-    }
-
-  }
-*/
