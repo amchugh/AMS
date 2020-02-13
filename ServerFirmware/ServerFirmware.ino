@@ -34,6 +34,10 @@
 #define TFT_DC   15
 #define SD_CS    2
 
+
+// DEBUG_PRINT* defines will output via the serial interface debug information 
+#define DEBUG_PRINT_SHOW_DATA_DETAILS
+
 // Keeping things simple with a maximum number of stations that are tracked with this instance.
 #define MAX_NUMBER_STATIONS 4
 Station stations[MAX_NUMBER_STATIONS];
@@ -150,6 +154,10 @@ void handleUDPPacket() {
     
     IPAddress sender = Udp.remoteIP();
     int stationIndex = findStation(stations, MAX_NUMBER_STATIONS, p.packetSenderID);
+
+    // When findStation returns -1 then this station is unknown to the server. 
+    // Ideally we just add the station to the list of tracked stations but the 
+    // number of these is finite.
     if (stationIndex == -1) { 
       // Attempt to add a station and get a stationIndex.  This might result in
       // a -1 for stationIndex if there are no free slots.
@@ -173,8 +181,12 @@ void handleUDPPacket() {
           p.sampleCount);
 #endif
         for (int i=0; i < p.sampleCount; i++) { 
-#ifdef DEBUG_PRINT
-          Serial.printf("handleUDPPacket - index: %2d, data: %d\n", i, p.samples[i]);
+#ifdef DEBUG_PRINT_SHOW_DATA_DETAILS
+          Serial.printf("handleUDPPacket; currentTime: %d, IP: %s, ID: %d, "
+                        "stationIndex: %d, packetNumber: %d, dataIndex: %d, data: %d\n", 
+                        currentTime, sender.toString().c_str(),
+                        p.packetSenderID, stationIndex, p.packetNumber, i,
+                        p.samples[i]);
 #endif
           addDataPoint(stations[stationIndex], p.packetNumber, p.samples[i], currentTime);
           g[stationIndex]->addDatasetValue(p.samples[i]);
@@ -227,9 +239,10 @@ void loop() {
   }
 
   /*
-   * Code to consider when I want to respond to touch gestures.  Not sure how long this will
-   * take and whether we should be careful about impact on receiving packets.
-   *
+   * Code to consider when I want to respond to touch gestures.  Not sure if
+   * this code will create a performance bottleneck and impact on the server's 
+   * ability to read and consume UDP packets.  This cannot be compromised.
+   
    TS_Point p = ts.getPoint();
 
    if (p.z < 100) { 
