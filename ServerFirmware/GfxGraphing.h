@@ -116,9 +116,14 @@ private:
   int mostRecentValuesIndex;
   uint32_t mostRecentValueMillis;
 
-  float currentValue;
-  float currentValueCount;
+  // In between renders we receive lots of transient values (or samples).
+  // These are stored here.
+  float currentSampleSum;
+  float currentSampleMax;
+  float currentSampleCount;
 
+  // The data values shown to the user.
+  float currentValue;
   float priorValue;
   float priorMax;
 };

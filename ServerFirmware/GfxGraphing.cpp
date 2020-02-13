@@ -33,7 +33,9 @@ SegmentedBarGraph::SegmentedBarGraph(Adafruit_GFX &d, int topLeftX, int topLeftY
   mostRecentValueMillis = 0;
 
   currentValue = 0;
-  currentValueCount = 0;
+  currentSampleSum = 0;
+  currentSampleMax = 0;
+  currentSampleCount = 0;
   priorValue = 0;
   priorMax = 0;
 
@@ -133,23 +135,30 @@ void SegmentedBarGraph::addDatasetValue(float y) {
   }
   handleMostRecentValues(y);
 
-  currentValue += y;
-  currentValueCount++;
+  currentSampleSum += y;
+  if (y > currentSampleMax) {
+    currentSampleMax = y;
+  }
+  currentSampleCount++;
 }
 
 void SegmentedBarGraph::render() {
 
-  // CurrentValue has the sum of all of the values added to the dataset
+  // currentSampleSum has the sum of all of the values added to the dataset
   // since the last render call.  We average them to get a simple aggregate
   // value.
-  if (currentValueCount == 0) {
+  if (currentSampleCount == 0) {
     // Assume that 0 is the correct default value to be used if no data has
     // been given.
     addDatasetValue(0);
   }
 
+#ifdef USE_AVERAGE
   // Determine the average value
-  currentValue /= currentValueCount;
+  currentValue = currentSampleSum / currentSampleCount;
+#else
+  currentValue = currentSampleMax;
+#endif
 
   if (currentValue != priorValue) {
     // Update the bars that are drawn.
@@ -162,8 +171,9 @@ void SegmentedBarGraph::render() {
   }
 
   priorValue = currentValue;
-  currentValue = 0;
-  currentValueCount = 0;
+  currentSampleSum = 0;
+  currentSampleCount = 0;
+  currentSampleMax = 0;
 
   priorMax = max;
 }

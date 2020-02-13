@@ -36,6 +36,7 @@
 
 
 // DEBUG_PRINT* defines will output via the serial interface debug information 
+#define DEBUG_PRINT
 #define DEBUG_PRINT_SHOW_DATA_DETAILS
 
 // Keeping things simple with a maximum number of stations that are tracked with this instance.
@@ -59,6 +60,8 @@ WiFiUDP Udp;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 Adafruit_STMPE610 ts = Adafruit_STMPE610(STMPE_CS);
 
+// The number of milliseconds to delay between each frame render.
+#define RENDER_FRAME_DELAY_MS 100
 uint32_t lastGraphRenderTime = 0;
 
 void setup() {
@@ -147,7 +150,11 @@ void handleUDPPacket() {
     numberOfPacketsReceived += 1;
 
     // read the packet into packetBufffer
+    memset(incomingPacket, 0, UDP_TX_PACKET_MAX_SIZE + 1);
     int n = Udp.read(incomingPacket, UDP_TX_PACKET_MAX_SIZE);
+    Serial.printf(
+      "handleUDPPacket - got data; parsePacket packetSize: %d, dataRead: %d\n",
+      packetSize, n);
 
     PacketData p;
     decodePacket(p, incomingPacket, n);
@@ -231,7 +238,7 @@ void loop() {
   handleUDPPacket();
   updateDisplayStats();
 
-  if ((currentTime - lastGraphRenderTime) > 33) { 
+  if ((currentTime - lastGraphRenderTime) > RENDER_FRAME_DELAY_MS) { 
     lastGraphRenderTime = currentTime;
     for (int i=0; i<MAX_NUMBER_STATIONS; i++) { 
       g[i]->render();

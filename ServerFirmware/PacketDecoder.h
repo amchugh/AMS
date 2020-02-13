@@ -58,8 +58,26 @@ StationIdentifier getPacketSenderID(const byte * const packet) {
   return (StationIdentifier) result;
 }
 
-int getSampleLength(int packetLength) {
-  return (packetLength - HEADER_SIZE) / 5 * 4;
+uint16_t getSampleLength(int packetLength) {
+  // There appears to be a bug in the UDP library that we are using where
+  // if the final byte is all zeros then it is truncated.  The length of
+  // the UDP packet will be one less than what was sent in that case.
+  // This means that if there are all quiet noises at a station and the last
+  // byte contains all the high order bits of the four samples then it will
+  // be all zeros.  This means that we will have a sample length of 0.  This
+  // would be invalid.
+  int dataPackets = (packetLength - HEADER_SIZE) / 5;
+  if (dataPackets == 0) {
+    // Jason :: TODO:  This doesn't solve the generic problem when we are
+    // sending more than 4 samples.
+    dataPackets = 1;
+  }
+
+  uint16_t result = dataPackets * 4;
+  Serial.printf( "getSampleLength; packetLength: %d, result: %d\n",
+      packetLength, result);
+
+  return result;
 }
 
 /**

@@ -104,13 +104,16 @@ int8_t addStation(Station *s, int numberOfStations, const StationIdentifier id) 
 // packet number values for Station. If the new packet number is equal to
 // the current, or if it is contained in the old range, it will be declared
 // invalid
-bool isPacketValid(Station &s, PacketNumber p) {
+bool isPacketValid(Station &s, const PacketNumber p) {
   // Starting from the last packet number seen and then working backwards
   // we look to see if there is a match between the passed in packet numbers
   // and any of those.
   int16_t c = s.lastPacketNumber;
   for (uint8_t i = 0; i <= INVALID_PACKET_NUMBER_RANGE; i++) {
     if (c == p) {
+      Serial.printf(
+        "isPacketValid - returning false; i: %d, lastPacketNumber: %d, "
+        "receivedPacketNumber: %d\n", i, s.lastPacketNumber, p);
       s.invalidPacketCount++;
       return false;
     }
