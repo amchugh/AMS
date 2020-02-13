@@ -254,7 +254,7 @@ Here is the code I started writing
 
 // How many pieces of sensor information should be in each packet?
 // MUST BE A MULTIPLE OF 4 TO ENSURE PROPER ENCODING
-const uint16_t PACKETSAMPLESIZE = 4;
+const uint16_t PACKETSAMPLESIZE = 16;
 
 // What is the current index of packet information
 uint16_t currentSample = 0;
@@ -324,6 +324,10 @@ struct Sample getDataSample() {
   return result;
 }
 
+uint8_t getPacketSize() {
+  int groupNumber = currentSample / 4;
+  return HEADERSPACE + (groupNumber) * 5;
+}
 
 // This method will get the data from the sensor and add it to the out packet
 void collectData() {
@@ -357,7 +361,7 @@ void collectData() {
 void sendPacket() {
   // Send the packet
   Udp.beginPacket(destip, serverUDPPort);
-  Udp.write(opacket);
+  Udp.write(opacket, getPacketSize());
   Udp.endPacket();
 }
 
