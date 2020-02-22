@@ -1,7 +1,3 @@
-// Needed Libraries:
-// Adafruit GFX Library - https://github.com/adafruit/Adafruit-GFX-Library
-// WiFiManager for ESP8266 by tzapu - https://github.com/tzapu/WiFiManager
-// Adafruit_SSD1306 - https://github.com/adafruit/Adafruit_SSD1306
 
 // This is the 'node' code and is intended to be run on an Adafruit Feather 
 // Huzzah (https://www.adafruit.com/product/2821)
@@ -12,6 +8,11 @@
 //  Board: Adafruit Feather Huzzah ESP8266
 //  Upload speed: 115200
 //  CPU: 80 Mhz
+
+// Needed Libraries:
+// Adafruit GFX Library - https://github.com/adafruit/Adafruit-GFX-Library
+// WiFiManager for ESP8266 by tzapu - https://github.com/tzapu/WiFiManager
+// Adafruit_SSD1306 - https://github.com/adafruit/Adafruit_SSD1306
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -41,14 +42,15 @@ WiFiUDP Udp;
 #define C_BUTTON 2
 
 // Define buffers for UDP data
-char ipacket[UDP_TX_PACKET_MAX_SIZE + 1];
-char opacket[UDP_TX_PACKET_MAX_SIZE + 1];
+char ipacket[UDP_TX_PACKET_MAX_SIZE];
+char opacket[UDP_TX_PACKET_MAX_SIZE];
 
 // Variables for loop
 bool doSend = false;
 bool wasPressed = false;
 uint32_t packetNumber = 0;
-uint32_t stime;
+uint32_t startTime;
+uint8_t stationId;
 
 void setup() {
   Serial.begin(57600);
@@ -78,11 +80,15 @@ void setup() {
   Serial.println();
   Serial.println("Connected!");
 
+  stationId = WiFi.localIP()[3];
+
   // Set up the UDP service
   Udp.begin(localUDPPort);
 
   // Print the ready message
   printConnected();
+
+  startTime = millis();
 }
 
 // ------------------------------
@@ -94,8 +100,10 @@ void printConnected() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
-  display.println("Connected!");
-  display.println( WiFi.localIP());
+  display.print("Station ");
+  display.print(stationId);
+  display.println(" Connected!");
+  display.println();
   display.println("Press A to begin");
   display.display();
 }
@@ -116,6 +124,13 @@ void printSendingMessage() {
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
   display.println("Sending Data");
+
+  display.setCursor(0,16);
+  display.println("Packets: ");
+
+  display.setCursor(0,24);
+  display.println("SPS: ");
+
   display.display();
 }
 
@@ -259,27 +274,15 @@ const uint16_t PACKETSAMPLESIZE = 16;
 // What is the current index of packet information
 uint16_t currentSample = 0;
 
-/*
-cs = 7
-
-h = 0
-s0 = 1
-s1 = 2
-s2 = 3
-s3 = 4
-g1 = 5
-s4 = 6
-s5 = 7
-s6 = 8
-s7 = 9
-g2 = 10
-*/
+// Track some simple metrics that allow a very generic idea of how things
+// are going.
+float accumulatedSamplesSent = 0;
 
 // Sets the information in the header of the packet
 void setupPacket() {
 
   // Clear out the entire packet so the bit manipulations work correctly.
-  memset(opacket, 0, UDP_TX_PACKET_MAX_SIZE+1);
+  memset(opacket, 0, UDP_TX_PACKET_MAX_SIZE);
 
   currentSample = 0;
   opacket[0] = getStationID();
@@ -287,7 +290,7 @@ void setupPacket() {
 }
 
 uint8_t getStationID() {
-  return (WiFi.localIP()[3]);
+  return stationId;
 }
 
 struct Sample {
@@ -301,7 +304,7 @@ struct Sample {
 // period.  Shorter durations here will make the unit more responsive.
 // Keep in mind that we collect many samples before sending them to the
 // server.
-#define SAMPLE_DURATION_MS 5
+#define SAMPLE_DURATION_MS 3
 struct Sample getDataSample() { 
   struct Sample result;
 
@@ -311,7 +314,7 @@ struct Sample getDataSample() {
 
   unsigned long startMillis = millis();  
 
-  while (millis() - startMillis < SAMPLE_DURATION_MS){
+  while (millis() - startMillis < SAMPLE_DURATION_MS) {
     uint16_t v = analogRead(A0);
     if (v > result.maxValue) {
       result.maxValue = v; 
@@ -339,8 +342,10 @@ void collectData() {
   // the time we have sampled the waveform. 
   uint16_t d = s.maxValue - s.minValue;
 
+#ifdef DEBUG
   Serial.printf("collectData; min: %d, max: %d, count: %d, v: %d\n", 
     s.minValue, s.maxValue, s.sampleCount, d);
+#endif
 
   // The 10 bit value appearing in d is placed in the outgoing packet. 
   // Current encoding puts the first 8 bits in the next available slot
@@ -353,12 +358,15 @@ void collectData() {
   opacket[s_byte_loc]     = d & 0xFF;
   opacket[group_byte_loc] = opacket[group_byte_loc] | ((d >> 8) << 2*s_group_pos);
 
-  // Increment counter
+  // Increment counters
   currentSample++;
+  accumulatedSamplesSent++;
 }
 
 // Sends whatever is in the opacket and resets counters
 void sendPacket() {
+  Serial.printf("sendPacket; packetSize: %d\n", getPacketSize());
+
   // Send the packet
   Udp.beginPacket(destip, serverUDPPort);
   Udp.write(opacket, getPacketSize());
@@ -396,15 +404,32 @@ void loop() {
   }
 
   if (doSend) {
-    // We use a while loop here so we have some guarantee on the delay between samples
+    // We use a while loop here so we have some guarantee on the delay between
+    // samples.
     while (currentSample < PACKETSAMPLESIZE) {
       collectData();
-      delay(1);
     } 
     sendPacket();
     packetNumber++;
     // Now setup the new packet
     setupPacket();
+  
+    display.fillRect(53,16,70,8, SSD1306_BLACK);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(53,16);
+    display.print(packetNumber);
+
+    unsigned long int elapsedTime = millis() - startTime;
+    if (elapsedTime > 3000) { 
+      display.fillRect(53,24,70,8, SSD1306_BLACK);
+      display.setTextColor(SSD1306_WHITE);
+      display.setCursor(53,24);
+      display.print( (float)elapsedTime / accumulatedSamplesSent );
+
+      startTime = millis();
+      accumulatedSamplesSent = 0;
+    }
+    display.display();
   }
 
   // We will take this time to process UDP

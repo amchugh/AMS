@@ -51,7 +51,7 @@ SegmentedBarGraph *g[MAX_NUMBER_STATIONS];
 // Allocate buffers for sending and receiving UDP data.
 // The maximum UDP packet size is defined in https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiUdp.h
 // and, as of 1/22/2020, is 8k.  
-byte incomingPacket[UDP_TX_PACKET_MAX_SIZE + 1]; 
+byte incomingPacket[UDP_TX_PACKET_MAX_SIZE]; 
 
 // An HTTP server exists for diagnostic and debugging purposes
 ESP8266WebServer server(80);
@@ -150,7 +150,7 @@ void handleUDPPacket() {
     numberOfPacketsReceived += 1;
 
     // read the packet into packetBufffer
-    memset(incomingPacket, 0, UDP_TX_PACKET_MAX_SIZE + 1);
+    memset(incomingPacket, 0, UDP_TX_PACKET_MAX_SIZE);
     int n = Udp.read(incomingPacket, UDP_TX_PACKET_MAX_SIZE);
     Serial.printf(
       "handleUDPPacket - got data; parsePacket packetSize: %d, dataRead: %d\n",
