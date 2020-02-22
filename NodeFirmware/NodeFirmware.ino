@@ -67,15 +67,21 @@ void setup() {
   // Try to connect to the server
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssidtarget, NULL);
+
   // Print the "searching" message
-  printSearching();
-  Serial.print("Connecting");
+  int numDots = 0;
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    if (numDots == 0) { 
+      printSearching();
+    }
+    delay(50);
     Serial.print(".");
     display.print(".");
     display.display();
-    yield();
+    numDots++;
+    if (numDots == 32) { 
+      numDots = 0;
+    }
   }
   Serial.println();
   Serial.println("Connected!");
@@ -304,7 +310,7 @@ struct Sample {
 // period.  Shorter durations here will make the unit more responsive.
 // Keep in mind that we collect many samples before sending them to the
 // server.
-#define SAMPLE_DURATION_MS 3
+#define SAMPLE_DURATION_MS 10
 struct Sample getDataSample() { 
   struct Sample result;
 
@@ -424,7 +430,9 @@ void loop() {
       display.fillRect(53,24,70,8, SSD1306_BLACK);
       display.setTextColor(SSD1306_WHITE);
       display.setCursor(53,24);
-      display.print( (float)elapsedTime / accumulatedSamplesSent );
+      display.print( (float) 
+        ( (accumulatedSamplesSent) / ( (float)elapsedTime / 1000) ) 
+      );
 
       startTime = millis();
       accumulatedSamplesSent = 0;
