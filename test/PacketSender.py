@@ -21,10 +21,8 @@ def sendData(stationID, packetNumber, valueData1, valueData2, valueData3, valueD
     data = struct.pack('BBBBBBB', stationID, packetNumber, dataByte1, dataByte2,
             dataByte3, dataByte4, dataByte5 )
 
-    print("UDP target IP: {}".format(UDP_IP))
-    print("UDP target port: {}".format(UDP_PORT))
-    print("Data: {} (stationId: {}, PacketNumber: {}, Value: {})".format(data,
-        stationID, packetNumber, valueData1))
+    print("UDP target IP: {}, port: {}, stationId: {}, PacketNumber: {}, Value1: {}".format(UDP_IP, UDP_PORT, stationID, packetNumber,
+                valueData1))
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
     sock.sendto(data, (UDP_IP, UDP_PORT))

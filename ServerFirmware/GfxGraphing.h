@@ -27,7 +27,7 @@
   *   g->startGraphing();
   *
   * Then, you call addDatasetValue some number of times and finally
-  * a render call when you want the average value of what has been fed
+  * a render call when you want the max/average value of what has been fed
   * to show on the screen.  Each render call results in the display being
   * updated.
   *
@@ -50,6 +50,10 @@ public:
 
   /* The range of values expected in the data points.  */
   void setMinAndMaxYAxisValues(float minYAxisValue, float maxYAxisValue);
+
+  /* The amount of time that a render will maintain the current view
+     even though no data values have been processed. */
+  void setMaintainPriorViewMills(uint32_t maintainPriorViewMillis);
 
   /* The group colors used by bar graph.  The bottom most 'leds' will be
    * shown as colorGroupOne.  These are considered "Ok" values and usually
@@ -77,9 +81,9 @@ public:
 
   /**
     * render will draw the average of all values passed in between this
-    * call and the prior render.  If no data values are provided then
-    * it assumed that the 0 is the latest value and render the graph
-    * based on that.
+    * call and the prior render.  If no data values are provided in the last
+    * timeoutMillis then it assumed that the 0 is the latest value and render
+    * the graph based on that.
     */
   void render();
 
@@ -115,6 +119,9 @@ private:
   float mostRecentValues[MOST_RECENT_VALUES_COUNT_MAX];
   int mostRecentValuesIndex;
   uint32_t mostRecentValueMillis;
+
+  uint32_t timeViewDisplayedMillis;
+  uint32_t maintainPriorViewMillis;
 
   // In between renders we receive lots of transient values (or samples).
   // These are stored here.

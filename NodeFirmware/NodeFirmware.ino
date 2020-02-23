@@ -65,6 +65,7 @@ void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
 
   // Try to connect to the server
+  wifi.persistent(false);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssidtarget, NULL);
 

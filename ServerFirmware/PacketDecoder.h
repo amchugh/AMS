@@ -74,9 +74,6 @@ uint16_t getSampleLength(int packetLength) {
   }
 
   uint16_t result = dataPackets * 4;
-  Serial.printf( "getSampleLength; packetLength: %d, result: %d\n",
-      packetLength, result);
-
   return result;
 }
 

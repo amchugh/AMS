@@ -40,6 +40,8 @@ SegmentedBarGraph::SegmentedBarGraph(Adafruit_GFX &d, int topLeftX, int topLeftY
   priorMax = 0;
 
   setupMode = true;
+  maintainPriorViewMillis = 3000;
+  timeViewDisplayedMillis = 0;
 }
 
 void SegmentedBarGraph::setBackgroundColor(uint16_t backgroundColor) {
@@ -62,6 +64,12 @@ void SegmentedBarGraph::setMinAndMaxYAxisValues(float minYAxisValue,
   this->minYAxisValue = minYAxisValue;
   this->maxYAxisValue = maxYAxisValue;
 }
+
+void SegmentedBarGraph::setMaintainPriorViewMills(
+    uint32_t maintainPriorViewMillis) {
+  this->maintainPriorViewMillis = maintainPriorViewMillis;
+}
+
 
 void SegmentedBarGraph::startGraphing() {
   if (setupMode == false) {
@@ -143,15 +151,23 @@ void SegmentedBarGraph::addDatasetValue(float y) {
 }
 
 void SegmentedBarGraph::render() {
+  uint32_t currentTime = millis();
 
-  // currentSampleSum has the sum of all of the values added to the dataset
-  // since the last render call.  We average them to get a simple aggregate
-  // value.
+  // currentSampleCount has the number of datasamples that have been received
+  // since the last render.  If this is 0 and we last update the view within
+  // the configured 'maintainPriorViewMillis' then we just don't do anything
+  // and maintain the last view actually rendered.
   if (currentSampleCount == 0) {
-    // Assume that 0 is the correct default value to be used if no data has
-    // been given.
-    addDatasetValue(0);
+    if (currentTime - timeViewDisplayedMillis > maintainPriorViewMillis) {
+      // Assume that 0 is the correct default value to be used if no data has
+      // been given.
+      addDatasetValue(0);
+    } else {
+      // Exit out early.
+      return;
+    }
   }
+  timeViewDisplayedMillis = currentTime;
 
 #ifdef USE_AVERAGE
   // Determine the average value
