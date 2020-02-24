@@ -1,0 +1,18 @@
+
+Dimensions for the Adafruit 2.4inch TFT display for the Featherwing
+
+--
+
+64.77 Wide  (midpoint: 32.385)
+52.578 Tall (midpoint: 26.289)
+
+Viewing window 50.75mm x 38.5mm 
+It is 7.01 mm from each side
+It is 7.04 mm from the top to bottom
+
+--
+
+2.54mm diameter of circles.
+The center is offset 2.54mm from the side
+
+4mm from each end.
