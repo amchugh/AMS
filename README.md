@@ -14,10 +14,10 @@ Server instance is:
  * Featherwing touch screen display - https://www.adafruit.com/product/3315
  
 
-The goal for transmission from each station is: 
-- 25 packets per second 
+The goal for fidelity of information being transferred is:
+- ~100 samples sent from the listening nodes to the server 
 - <=5% drop rate at 30ft through a wall
-- 50 new data points per packet
+- Number of packets per second and therefore their size will be determined by packet processing speed on the server. 
 
 
 ## Diagnosing a server instance
