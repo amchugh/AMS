@@ -16,3 +16,44 @@ It is 7.04 mm from the top to bottom
 The center is offset 2.54mm from the side
 
 4mm from each end.
+
+--
+
+Good thickness/heights are as follows.
+For the front panel 2mm thick for the outer wall.
+The Post should be 4mm beyond that (6mm high).
+The little post should be 3mm beyond that (9mm).
+
+A 2mm round over in the viewing area for the screen.
+(Too much and you get some ugly flatness.)
+
+Make the outer wall be 6mm tall. 
+
+--
+
+Assume using 3mm screws to attach the top to the base. 
+
+--
+
+Captive nut for M3 screw is:
+  - 5.45mm across the flats 
+  - 6.18mm across the corners 
+  - 2.24mm for its width 
+
+
+
+--
+
+Power button is 6.2mm wide.
+12.25mm at tallest point.
+10.25 at least tallest point.
+
+Opening for the USB cord is:
+  12mm wide
+  10mm tall
+   3mm deep
+
+--
+
+60 degree tilt.
+26mm height for the base.
