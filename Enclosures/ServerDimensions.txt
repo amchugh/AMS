@@ -37,8 +37,9 @@ Assume using 3mm screws to attach the top to the base.
 
 Captive nut for M3 screw is:
   - 5.45mm across the flats 
-  - 6.18mm across the corners 
-  - 2.24mm for its width 
+  - 6.06 across the corners 
+  - 3.16 for each side
+  - 2.24mm for its depth 
 
 
 
